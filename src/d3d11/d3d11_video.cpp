@@ -124,4 +124,165 @@ namespace dxvk {
     m_enumerator->GetVideoProcessorRateConversionCaps(m_rateConversionIndex, pCaps);
   }
 
+
+
+
+  D3D11VideoProcessorInputView::D3D11VideoProcessorInputView(
+          D3D11Device*            pDevice,
+          ID3D11Resource*         pResource,
+    const D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC& Desc)
+  : D3D11DeviceChild<ID3D11VideoProcessorInputView>(pDevice),
+    m_resource(pResource), m_desc(Desc) {
+    D3D11_COMMON_RESOURCE_DESC resourceDesc = { };
+    GetCommonResourceDesc(pResource, &resourceDesc);
+
+    DXGI_VK_FORMAT_INFO formatInfo = pDevice->LookupFormat(resourceDesc.Format, DXGI_VK_FORMAT_MODE_COLOR);
+    DXGI_VK_FORMAT_FAMILY formatFamily = pDevice->LookupFamily(resourceDesc.Format, DXGI_VK_FORMAT_MODE_COLOR);
+
+    VkImageAspectFlags aspectMask = imageFormatInfo(formatInfo.Format)->aspectMask;
+
+    DxvkImageViewCreateInfo viewInfo;
+    viewInfo.format  = formatInfo.Format;
+    viewInfo.swizzle = formatInfo.Swizzle;
+    viewInfo.usage   = VK_IMAGE_USAGE_SAMPLED_BIT;
+
+    switch (m_desc.ViewDimension) {
+      case D3D11_VPIV_DIMENSION_TEXTURE2D:
+        viewInfo.type       = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.minLevel   = m_desc.Texture2D.MipSlice;
+        viewInfo.numLevels  = 1;
+        viewInfo.minLayer   = 0;
+        viewInfo.numLayers  = 1;
+        break;
+
+      case D3D11_RTV_DIMENSION_UNKNOWN:
+        throw DxvkError("Invalid view dimension");
+    }
+
+    for (uint32_t i = 0; aspectMask && i < m_views.size(); i++) {
+      viewInfo.aspect = vk::getNextAspect(aspectMask);
+
+      if (viewInfo.aspect != VK_IMAGE_ASPECT_COLOR_BIT) {
+        viewInfo.format = formatFamily.Formats[i];
+        m_isYCbCr = true;  // There are no planar RGB formats
+      }
+
+      m_views[i] = pDevice->GetDXVKDevice()->createImageView(
+        GetCommonTexture(pResource)->GetImage(), viewInfo);
+    }
+  }
+
+
+  D3D11VideoProcessorInputView::~D3D11VideoProcessorInputView() {
+
+  }
+
+
+  HRESULT STDMETHODCALLTYPE D3D11VideoProcessorInputView::QueryInterface(
+          REFIID                  riid,
+          void**                  ppvObject) {
+    if (riid == __uuidof(IUnknown)
+     || riid == __uuidof(ID3D11DeviceChild)
+     || riid == __uuidof(ID3D11View)
+     || riid == __uuidof(ID3D11VideoProcessorInputView)) {
+      *ppvObject = ref(this);
+      return S_OK;
+    }
+
+    Logger::warn("D3D11VideoProcessorInputView::QueryInterface: Unknown interface query");
+    Logger::warn(str::format(riid));
+    return E_NOINTERFACE;
+  }
+
+
+  void STDMETHODCALLTYPE D3D11VideoProcessorInputView::GetResource(
+          ID3D11Resource**        ppResource) {
+    *ppResource = m_resource.ref();
+  }
+
+
+  void STDMETHODCALLTYPE D3D11VideoProcessorInputView::GetDesc(
+          D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC* pDesc) {
+    *pDesc = m_desc;
+  }
+
+
+
+  D3D11VideoProcessorOutputView::D3D11VideoProcessorOutputView(
+          D3D11Device*            pDevice,
+          ID3D11Resource*         pResource,
+    const D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC& Desc)
+  : D3D11DeviceChild<ID3D11VideoProcessorOutputView>(pDevice),
+    m_resource(pResource), m_desc(Desc) {
+    D3D11_COMMON_RESOURCE_DESC resourceDesc = { };
+    GetCommonResourceDesc(pResource, &resourceDesc);
+
+    DXGI_VK_FORMAT_INFO formatInfo = pDevice->LookupFormat(
+      resourceDesc.Format, DXGI_VK_FORMAT_MODE_COLOR);
+
+    DxvkImageViewCreateInfo viewInfo;
+    viewInfo.format  = formatInfo.Format;
+    viewInfo.aspect  = imageFormatInfo(viewInfo.format)->aspectMask;
+    viewInfo.swizzle = formatInfo.Swizzle;
+    viewInfo.usage   = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    switch (m_desc.ViewDimension) {
+      case D3D11_VPOV_DIMENSION_TEXTURE2D:
+        viewInfo.type       = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.minLevel   = m_desc.Texture2D.MipSlice;
+        viewInfo.numLevels  = 1;
+        viewInfo.minLayer   = 0;
+        viewInfo.numLayers  = 1;
+        break;
+
+      case D3D11_VPOV_DIMENSION_TEXTURE2DARRAY:
+        viewInfo.type       = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        viewInfo.minLevel   = m_desc.Texture2DArray.MipSlice;
+        viewInfo.numLevels  = 1;
+        viewInfo.minLayer   = m_desc.Texture2DArray.FirstArraySlice;
+        viewInfo.numLayers  = m_desc.Texture2DArray.ArraySize;
+        break;
+
+      case D3D11_RTV_DIMENSION_UNKNOWN:
+        throw DxvkError("Invalid view dimension");
+    }
+
+    m_view = pDevice->GetDXVKDevice()->createImageView(
+      GetCommonTexture(pResource)->GetImage(), viewInfo);
+  }
+
+
+  D3D11VideoProcessorOutputView::~D3D11VideoProcessorOutputView() {
+
+  }
+
+
+  HRESULT STDMETHODCALLTYPE D3D11VideoProcessorOutputView::QueryInterface(
+          REFIID                  riid,
+          void**                  ppvObject) {
+    if (riid == __uuidof(IUnknown)
+     || riid == __uuidof(ID3D11DeviceChild)
+     || riid == __uuidof(ID3D11View)
+     || riid == __uuidof(ID3D11VideoProcessorOutputView)) {
+      *ppvObject = ref(this);
+      return S_OK;
+    }
+
+    Logger::warn("D3D11VideoProcessorOutputView::QueryInterface: Unknown interface query");
+    Logger::warn(str::format(riid));
+    return E_NOINTERFACE;
+  }
+
+
+  void STDMETHODCALLTYPE D3D11VideoProcessorOutputView::GetResource(
+          ID3D11Resource**        ppResource) {
+    *ppResource = m_resource.ref();
+  }
+
+
+  void STDMETHODCALLTYPE D3D11VideoProcessorOutputView::GetDesc(
+          D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC* pDesc) {
+    *pDesc = m_desc;
+  }
+
 }
