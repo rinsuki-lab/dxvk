@@ -60,7 +60,7 @@ namespace dxvk {
     bool isMutable = formatFamily.FormatCount > 1;
     bool isColorFormat = (formatProperties->aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) != 0;
 
-    if (isMutable && isColorFormat) {
+    if (isMutable && (isColorFormat || isMultiPlane)) {
       imageInfo.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 
       // Typeless UAV images have relaxed reinterpretation rules
