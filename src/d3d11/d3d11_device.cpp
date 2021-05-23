@@ -783,9 +783,13 @@ namespace dxvk {
     InitReturnPtr(ppGeometryShader);
     D3D11CommonShader module;
 
-    if (!m_dxvkDevice->features().extTransformFeedback.transformFeedback)
-      return DXGI_ERROR_INVALID_CALL;
-
+    if (!m_dxvkDevice->features().extTransformFeedback.transformFeedback) {
+      Logger::err(
+        "D3D11: CreateGeometryShaderWithStreamOutput:"
+        "\n  Transform feedback not supported by device");
+      return E_NOTIMPL;
+    }
+    
     // Zero-init some counterss so that we can increment
     // them while walking over the stream output entries
     DxbcXfbInfo xfb = { };
